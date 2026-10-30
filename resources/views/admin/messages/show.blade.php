@@ -1,0 +1,9 @@
+@extends('admin.layout')
+@section('title', 'قراءة الرسالة')
+@section('eyebrow', 'صندوق الوارد')
+@section('heading', 'رسالة تستحق اهتمامك.')
+@section('description', 'اقرأ تفاصيل الرسالة وتواصل مع المرسل عبر بريدك الإلكتروني.')
+@section('actions')<a class="btn btn-quiet" href="{{ route('admin.messages.index') }}">العودة للرسائل <svg class="ui-icon icon-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M20 12H4m7-7-7 7 7 7"/></svg></a>@endsection
+@section('content')
+<article class="panel message-detail"><div class="message-detail-head"><div class="sender-info"><span class="message-avatar message-avatar-lg">{{ mb_substr($message->name, 0, 1) }}</span><div><h2>{{ $message->name }}</h2><a href="mailto:{{ $message->email }}" dir="ltr">{{ $message->email }}</a></div></div><time datetime="{{ $message->created_at->toIso8601String() }}">{{ $message->created_at->format('Y/m/d · H:i') }}</time></div><div class="message-detail-body"><span class="eyebrow">الموضوع</span><h2>{{ $message->subject }}</h2><div class="message-content">{{ $message->message }}</div></div><div class="message-detail-footer"><a class="btn btn-lime" href="mailto:{{ $message->email }}?subject={{ rawurlencode('رد: '.$message->subject) }}">الرد عبر البريد الإلكتروني <svg class="ui-icon icon-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M5 19 19 5M5 5h14v14"/></svg></a><form action="{{ route('admin.messages.destroy', $message) }}" method="POST" onsubmit="return confirm('هل تريد حذف هذه الرسالة نهائيًا؟');">@csrf @method('DELETE')<button class="btn btn-delete" type="submit">حذف الرسالة</button></form></div></article>
+@endsection
