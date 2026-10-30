@@ -78,7 +78,7 @@
                         <article class="project-card reveal" data-category="{{ $project->category }}" style="--project-accent: {{ $project->accent_color ?: '#b8c6a0' }}">
                             <div class="project-art project-art-{{ $loop->index % 4 }}" style="--project-accent: {{ $project->accent_color ?? '#b8c6a0' }}">
                                 @if($project->image_path)
-                                    <img class="project-image" src="{{ asset('storage/'.$project->image_path) }}" alt="واجهة مشروع {{ $project->title }}" loading="lazy">
+                                    <img class="project-image" src="{{ \Illuminate\Support\Facades\Storage::disk('public')->url($project->image_path) }}" alt="صورة مشروع {{ $project->title }}" loading="lazy">
                                 @else
                                     <div class="project-mockup" aria-hidden="true">
                                         <div class="mockup-top"><span class="mockup-logo">{{ mb_substr($project->title, 0, 1) }}<i>.</i></span><div class="mockup-nav"><i></i><i></i><i></i></div><span class="mockup-menu"><svg class="icon-arrow" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 19 19 5M5 5h14v14"/></svg></span></div>
@@ -150,7 +150,7 @@
                         @if($profile->linkedin_url)<a href="{{ $profile->linkedin_url }}" target="_blank" rel="noopener noreferrer">LinkedIn <span aria-hidden="true"><svg class="icon-arrow" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 19 19 5M5 5h14v14"/></svg></span><span class="visually-hidden"> — يفتح في نافذة جديدة</span></a>@endif
                     </div>
                 </div>
-                <form class="contact-form reveal" action="{{ route('contact.store') }}" method="POST">
+                <form class="contact-form reveal" action="{{ route('contact.store', [], false) }}" method="POST">
                     @csrf
                     @if(session('success'))<div class="form-feedback feedback-success" role="status">{{ session('success') }}</div>@endif
                     @if($errors->any())<div class="form-feedback feedback-error" role="alert">تعذّر إرسال الرسالة. راجع الحقول المبيّنة وحاول مجددًا.@error('website')<br>{{ $message }}@enderror</div>@endif

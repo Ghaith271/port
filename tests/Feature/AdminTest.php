@@ -7,6 +7,8 @@ use App\Models\Project;
 use App\Models\Skill;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Http\UploadedFile;
+use Illuminate\Support\Facades\Storage;
 use Tests\CreatesPortfolio;
 use Tests\TestCase;
 
@@ -82,6 +84,86 @@ class AdminTest extends TestCase
         $this->assertDatabaseCount('projects', 1);
     }
 
+    public function test_admin_can_upload_replace_remove_and_delete_a_project_image(): void
+    {
+        Storage::fake('public');
+        $this->actingAs(User::factory()->create());
+
+        $this->post(route('admin.projects.store'), $this->projectData([
+            'image' => $this->pngUpload('first.png'),
+        ]))->assertRedirect(route('admin.projects.index'));
+
+        $project = Project::firstOrFail();
+        $firstPath = $project->image_path;
+        $this->assertStringStartsWith('projects/', $firstPath);
+        Storage::disk('public')->assertExists($firstPath);
+
+        $this->createProject(['title' => 'Second project', 'slug' => 'second-project']);
+        $this->put(route('admin.projects.update', $project), $this->projectData([
+            'slug' => 'second-project',
+            'image' => $this->pngUpload('failed-replacement.png'),
+        ]))->assertSessionHasErrors('slug');
+        $this->assertSame($firstPath, $project->fresh()->image_path);
+        Storage::disk('public')->assertExists($firstPath);
+        $this->assertSame([$firstPath], Storage::disk('public')->allFiles('projects'));
+
+        $this->put(route('admin.projects.update', $project), $this->projectData(['title' => 'Image retained']))
+            ->assertRedirect(route('admin.projects.index'));
+        $this->assertSame($firstPath, $project->fresh()->image_path);
+        Storage::disk('public')->assertExists($firstPath);
+
+        $this->put(route('admin.projects.update', $project), $this->projectData([
+            'image' => $this->pngUpload('replacement.png'),
+        ]))->assertRedirect(route('admin.projects.index'));
+        $replacementPath = $project->fresh()->image_path;
+        $this->assertNotSame($firstPath, $replacementPath);
+        Storage::disk('public')->assertExists($replacementPath);
+        Storage::disk('public')->assertMissing($firstPath);
+
+        Storage::disk('public')->put('unrelated/keep.png', 'not a project image');
+        $this->put(route('admin.projects.update', $project), $this->projectData([
+            'remove_image' => '1',
+        ]))->assertRedirect(route('admin.projects.index'));
+        $this->assertNull($project->fresh()->image_path);
+        Storage::disk('public')->assertMissing($replacementPath);
+
+        $this->put(route('admin.projects.update', $project), $this->projectData([
+            'image' => $this->pngUpload('final.png'),
+        ]))->assertRedirect(route('admin.projects.index'));
+        $finalPath = $project->fresh()->image_path;
+        $this->delete(route('admin.projects.destroy', $project))->assertRedirect();
+        Storage::disk('public')->assertMissing($finalPath);
+        Storage::disk('public')->assertExists('unrelated/keep.png');
+    }
+
+    public function test_project_image_validation_rejects_non_images_and_files_over_five_megabytes(): void
+    {
+        Storage::fake('public');
+        $this->actingAs(User::factory()->create());
+
+        $this->post(route('admin.projects.store'), $this->projectData([
+            'image' => UploadedFile::fake()->create('not-an-image.jpg', 1, 'text/plain'),
+        ]))->assertSessionHasErrors('image');
+
+        $this->post(route('admin.projects.store'), $this->projectData([
+            'image' => UploadedFile::fake()->create('oversized.jpg', 5121, 'image/jpeg'),
+        ]))->assertSessionHasErrors('image');
+
+        $this->assertDatabaseCount('projects', 0);
+        $this->assertSame([], Storage::disk('public')->allFiles('projects'));
+    }
+
+    public function test_guests_cannot_upload_project_images(): void
+    {
+        Storage::fake('public');
+        $this->post(route('admin.projects.store'), $this->projectData([
+            'image' => $this->pngUpload('unauthorized.png'),
+        ]))->assertRedirect(route('login'));
+
+        $this->assertDatabaseCount('projects', 0);
+        $this->assertSame([], Storage::disk('public')->allFiles('projects'));
+    }
+
     public function test_empty_slug_is_generated_and_is_preserved_when_editing(): void
     {
         $this->actingAs(User::factory()->create());
@@ -153,5 +235,13 @@ class AdminTest extends TestCase
         ]))->assertSessionHasErrors(['instagram_url', 'phone']);
         $this->assertSame($data['instagram_url'], $profile->fresh()->instagram_url);
         $this->assertSame($data['phone'], $profile->fresh()->phone);
+    }
+
+    private function pngUpload(string $name): UploadedFile
+    {
+        return UploadedFile::fake()->createWithContent(
+            $name,
+            base64_decode('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+j+XcAAAAASUVORK5CYII=', true),
+        );
     }
 }

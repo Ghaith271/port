@@ -4,11 +4,17 @@ namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
 use App\Models\Project;
+use Illuminate\Http\UploadedFile;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
 use Illuminate\View\View;
+use RuntimeException;
+use Throwable;
 
 class ProjectController extends Controller
 {
@@ -24,7 +30,22 @@ class ProjectController extends Controller
 
     public function store(Request $request): RedirectResponse
     {
-        Project::create($this->data($request));
+        $data = $this->data($request);
+        $image = $data['image'] ?? null;
+        unset($data['image'], $data['remove_image']);
+
+        $newImagePath = null;
+        try {
+            if ($image instanceof UploadedFile) {
+                $newImagePath = $this->storeImage($image);
+                $data['image_path'] = $newImagePath;
+            }
+
+            DB::transaction(fn () => Project::create($data));
+        } catch (Throwable $exception) {
+            $this->deleteProjectImage($newImagePath);
+            throw $exception;
+        }
 
         return redirect()->route('admin.projects.index')->with('success', 'تمت إضافة المشروع.');
     }
@@ -36,14 +57,47 @@ class ProjectController extends Controller
 
     public function update(Request $request, Project $project): RedirectResponse
     {
-        $project->update($this->data($request, $project));
+        $data = $this->data($request, $project);
+        $image = $data['image'] ?? null;
+        $removeImage = (bool) ($data['remove_image'] ?? false);
+        unset($data['image'], $data['remove_image']);
+
+        $oldImagePath = $project->image_path;
+        $newImagePath = null;
+        try {
+            if ($image instanceof UploadedFile) {
+                $newImagePath = $this->storeImage($image);
+                $data['image_path'] = $newImagePath;
+            } elseif ($removeImage) {
+                $data['image_path'] = null;
+            }
+
+            DB::transaction(function () use ($project, $data): void {
+                if (! $project->update($data)) {
+                    throw new RuntimeException('Unable to update project.');
+                }
+            });
+        } catch (Throwable $exception) {
+            $this->deleteProjectImage($newImagePath);
+            throw $exception;
+        }
+
+        if ($newImagePath !== null || $removeImage) {
+            $this->deleteProjectImage($oldImagePath);
+        }
 
         return redirect()->route('admin.projects.index')->with('success', 'تم تحديث المشروع.');
     }
 
     public function destroy(Project $project): RedirectResponse
     {
-        $project->delete();
+        $imagePath = $project->image_path;
+        DB::transaction(function () use ($project): void {
+            if (! $project->delete()) {
+                throw new RuntimeException('Unable to delete project.');
+            }
+        });
+        $this->deleteProjectImage($imagePath);
 
         return back()->with('success', 'تم حذف المشروع.');
     }
@@ -61,6 +115,8 @@ class ProjectController extends Controller
             'github_url' => ['nullable', 'url:http,https', 'max:2048'], 'featured' => ['sometimes', 'boolean'],
             'published' => ['sometimes', 'boolean'], 'sort_order' => ['nullable', 'integer', 'between:0,9999'],
             'accent_color' => ['required', 'regex:/^#[0-9a-fA-F]{6}$/'],
+            'image' => ['nullable', 'image', 'mimes:jpg,jpeg,png,webp', 'mimetypes:image/jpeg,image/png,image/webp', 'max:5120'],
+            'remove_image' => ['sometimes', 'boolean'],
         ]);
         $data['tech_stack'] = array_values(array_filter(array_map('trim', preg_split('/[,،]/u', $data['tech_stack'] ?? ''))));
         $data['featured'] = $request->boolean('featured');
@@ -68,5 +124,26 @@ class ProjectController extends Controller
         $data['sort_order'] = $data['sort_order'] ?? 0;
 
         return $data;
+    }
+
+    private function storeImage(UploadedFile $image): string
+    {
+        $path = $image->store('projects', 'public');
+        if (! is_string($path) || $path === '') {
+            throw new RuntimeException('Unable to store project image.');
+        }
+
+        return $path;
+    }
+
+    private function deleteProjectImage(?string $path): void
+    {
+        if ($path === null || ! str_starts_with($path, 'projects/') || basename($path) !== substr($path, strlen('projects/'))) {
+            return;
+        }
+
+        if (! Storage::disk('public')->delete($path)) {
+            Log::warning('Unable to delete project image.', ['path' => $path]);
+        }
     }
 }

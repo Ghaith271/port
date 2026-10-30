@@ -6,7 +6,7 @@ use Illuminate\Database\Eloquent\Model;
 
 class Project extends Model
 {
-    protected $fillable = ['title', 'slug', 'category', 'description', 'tech_stack', 'project_url', 'github_url', 'featured', 'published', 'sort_order', 'accent_color'];
+    protected $fillable = ['title', 'slug', 'category', 'description', 'tech_stack', 'project_url', 'github_url', 'featured', 'published', 'sort_order', 'accent_color', 'image_path'];
 
     protected function casts(): array
     {

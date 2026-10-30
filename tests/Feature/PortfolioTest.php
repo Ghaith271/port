@@ -31,6 +31,14 @@ class PortfolioTest extends TestCase
             ->assertSee($payload)->assertDontSee($payload, false);
     }
 
+    public function test_missing_routes_render_the_arabic_not_found_page_with_http_404(): void
+    {
+        $this->get('/this-page-does-not-exist')
+            ->assertNotFound()
+            ->assertSee('الصفحة غير موجودة')
+            ->assertSee('href="/"', false);
+    }
+
     public function test_valid_contact_message_is_persisted_and_redirects_to_contact_section(): void
     {
         $this->post(route('contact.store'), $this->contactData())
@@ -44,7 +52,8 @@ class PortfolioTest extends TestCase
     {
         $this->post(route('contact.store'), [
             'name' => '', 'email' => 'not-an-email', 'subject' => '', 'message' => 'short',
-        ])->assertSessionHasErrors(['name', 'email', 'subject', 'message']);
+        ])->assertSessionHasErrors(['name', 'email', 'subject', 'message'])
+            ->assertSessionHas('_old_input.email', 'not-an-email');
 
         $this->assertDatabaseCount('messages', 0);
     }

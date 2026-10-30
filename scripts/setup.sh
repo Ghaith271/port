@@ -11,6 +11,7 @@ if ! grep -q '^APP_KEY=base64:' .env; then php artisan key:generate --no-interac
 if [ ! -f database/database.sqlite ]; then touch database/database.sqlite; fi
 php artisan migrate --force --no-interaction
 php artisan db:seed --force --no-interaction
+php artisan storage:link
 npm ci --no-audit --no-fund
 npm run build
 echo 'Portfolio prepared. Create an administrator with: php artisan portfolio:admin'

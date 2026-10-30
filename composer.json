@@ -36,7 +36,8 @@
     },
     "scripts": {
         "setup": [
-            "bash scripts/setup.sh"
+            "@composer install --no-interaction",
+            "@php scripts/setup.php"
         ],
         "dev": [
             "Composer\\Config::disableProcessTimeout",

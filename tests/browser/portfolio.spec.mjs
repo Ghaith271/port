@@ -98,6 +98,7 @@ test('reduced-motion preference leaves content visible and stops decorative moti
 
 test('contact form submits successfully through the real application', async ({ page }) => {
     await page.goto('/');
+    await expect(page.locator('.contact-form')).toHaveAttribute('action', '/contact');
     await page.locator('#contact-name').fill('اختبار متصفح');
     await page.locator('#contact-email').fill('smoke-browser@example.test');
     await page.locator('#contact-subject').fill('Browser smoke test');
@@ -111,6 +112,35 @@ test('contact form submits successfully through the real application', async ({ 
     await expect(page.getByText('smoke-browser@example.test', { exact: true })).toBeVisible();
 });
 
+test('contact validation errors preserve the submitted fields in the browser', async ({ page }) => {
+    await page.goto('/');
+    await page.locator('#contact-name').fill('زائر الاختبار');
+    await page.locator('#contact-email').fill('invalid-email');
+    await page.locator('#contact-subject').fill('تحقق من الحقول');
+    await page.locator('#contact-message').fill('رسالة اختبار غير صالحة يجب ألا تحفظ.');
+    await page.locator('.contact-form').evaluate(form => { form.noValidate = true; });
+    await page.getByRole('button', { name: 'أرسل رسالتك' }).click();
+
+    await expect(page.locator('.feedback-error')).toContainText('تعذّر إرسال الرسالة');
+    await expect(page.locator('#contact-name')).toHaveValue('زائر الاختبار');
+    await expect(page.locator('#contact-email')).toHaveValue('invalid-email');
+    await expect(page.locator('#contact-subject')).toHaveValue('تحقق من الحقول');
+    await expect(page.locator('#contact-message')).toHaveValue('رسالة اختبار غير صالحة يجب ألا تحفظ.');
+});
+
+test('an expired contact session shows refresh guidance without bypassing CSRF', async ({ page, context }) => {
+    await page.goto('/');
+    await context.clearCookies();
+    await page.locator('#contact-name').fill('جلسة منتهية');
+    await page.locator('#contact-email').fill('expired-session@example.test');
+    await page.locator('#contact-subject').fill('اختبار انتهاء الجلسة');
+    await page.locator('#contact-message').fill('لا ينبغي حفظ الإرسال بعد انتهاء الجلسة.');
+    await page.getByRole('button', { name: 'أرسل رسالتك' }).click();
+
+    await expect(page.getByRole('heading', { name: 'انتهت صلاحية الصفحة' })).toBeVisible();
+    await expect(page.getByText('حدّث الصفحة ثم أعد إرسال رسالتك.')).toBeVisible();
+});
+
 test('contact submissions without a CSRF token are rejected', async ({ request }) => {
     const response = await request.post('/contact', {
         form: {
@@ -121,6 +151,7 @@ test('contact submissions without a CSRF token are rejected', async ({ request }
         },
     });
     expect(response.status()).toBe(419);
+    expect(await response.text()).toContain('انتهت صلاحية نموذج التواصل');
 });
 
 test('anonymous admin visitors are redirected to an accessible login form', async ({ page }) => {
@@ -156,6 +187,11 @@ test('administrator can create, update, publish, and delete a project', async ({
     await page.locator('#category').fill('اختبارات متصفح');
     await page.locator('#description').fill('مشروع اختبار للتحقق من دورة الإضافة والتعديل والنشر والحذف عبر لوحة التحكم.');
     await page.locator('#tech_stack').fill('Laravel, JavaScript, Bootstrap');
+    await page.locator('#image').setInputFiles({
+        name: 'browser-project.png',
+        mimeType: 'image/png',
+        buffer: Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+j+XcAAAAASUVORK5CYII=', 'base64'),
+    });
     await page.getByLabel('نشر في البورتفوليو', { exact: true }).check();
     await page.getByRole('button', { name: /إضافة المشروع/ }).click();
     await expect(page.getByRole('status')).toContainText('تمت إضافة المشروع');
@@ -167,6 +203,18 @@ test('administrator can create, update, publish, and delete a project', async ({
     await expect(page.getByRole('status')).toContainText('تم تحديث المشروع');
     await page.goto('/');
     await expect(page.getByRole('heading', { name: 'Browser workflow project updated', exact: true })).toBeVisible();
+    const projectImage = page.locator('img[alt="صورة مشروع Browser workflow project updated"]');
+    await expect(projectImage).toBeVisible();
+    await expect(projectImage).toHaveAttribute('loading', 'lazy');
+    await expect(projectImage).toHaveCSS('object-fit', 'cover');
+    expect(await projectImage.evaluate(image => image.naturalWidth)).toBeGreaterThan(0);
+    await noHorizontalOverflow(page);
+    await page.setViewportSize({ width: 390, height: 844 });
+    await expect(projectImage).toBeVisible();
+    await noHorizontalOverflow(page);
+    const mobileImage = await projectImage.boundingBox();
+    expect(mobileImage.width).toBeLessThanOrEqual(390);
+    await page.setViewportSize({ width: 1440, height: 1000 });
 
     await page.goto('/admin/projects');
     row = page.getByRole('row').filter({ hasText: 'Browser workflow project updated' });

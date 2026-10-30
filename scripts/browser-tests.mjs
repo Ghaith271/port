@@ -83,8 +83,9 @@ try {
     console.log('Preparing an isolated browser-test database…');
     await run(php, ['artisan', 'migrate', '--seed', '--force', '--no-interaction']);
     await run(php, ['-r', `require 'vendor/autoload.php'; $app = require 'bootstrap/app.php'; $app->make(Illuminate\\Contracts\\Console\\Kernel::class)->bootstrap(); App\\Models\\User::create(['name' => 'Browser Test Admin', 'email' => getenv('BROWSER_TEST_EMAIL'), 'password' => getenv('BROWSER_TEST_PASSWORD')]);`]);
-    server = spawn(php, ['artisan', 'serve', '--host=127.0.0.1', `--port=${port}`, '--tries=1', '--no-reload'], {
-        cwd: root,
+    const router = path.join(root, 'vendor', 'laravel', 'framework', 'src', 'Illuminate', 'Foundation', 'resources', 'server.php');
+    server = spawn(php, ['-S', `127.0.0.1:${port}`, router], {
+        cwd: path.join(root, 'public'),
         env: environment,
         detached: process.platform !== 'win32',
         stdio: ['ignore', 'pipe', 'pipe'],
